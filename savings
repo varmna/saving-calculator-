@@ -1,0 +1,227 @@
+// ==UserScript==
+// @name         Movable Dual Calculators
+// @namespace    http://tampermonkey.net/
+// @version      1.8
+// @description  Two separate calculators with orange ge drag bar and reset buttons, multiple items support
+// @match        https://beta.console.harmony.a2z.com/savings-agent-simulator/
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const calculatorHTML = `
+        <div class="dragHandle" style="background: #ff9900; height: 6px; cursor: move;"></div>
+        <div id="savingsPercentageHeader" class="calcHeader" style="cursor: pointer; font-weight: bold; font-size: 10px; padding: 2px;">
+            ▼ Savings Percentage
+        </div>
+        <div id="savingsPercentageContent" class="calcContent" style="display: none; padding: 5px;">
+            <div id="savingsInputs">
+                <div class="savingsRow">
+                    <input type="number" class="priceInput" placeholder="Price 1" style="width: 70px; margin: 2px; font-size: 11px;">
+                    <input type="number" class="saveInput" placeholder="Save 1" style="width: 70px; margin: 2px; font-size: 11px;">
+                </div>
+                <div class="savingsRow">
+                    <input type="number" class="priceInput" placeholder="Price 2" style="width: 70px; margin: 2px; font-size: 11px;">
+                    <input type="number" class="saveInput" placeholder="Save 2" style="width: 70px; margin: 2px; font-size: 11px;">
+                </div>
+            </div>
+            <button id="addSavingsField" style="width: 30px; font-size: 11px; margin: 2px;">+</button>
+            <button id="removeSavingsField" style="width: 30px; font-size: 11px; margin: 2px;">-</button>
+            <button id="calcBtn" style="width: 48%; margin-top: 3px; font-size: 11px;">Calculate %</button>
+            <button id="resetSavings" style="width: 48%; margin-top: 3px; font-size: 11px;">Reset</button>
+            <div style="font-size: 11px; margin-top: 3px;">
+                Items: <span id="savingsItemCount">2</span>
+                <div id="result" style="margingin-top: 3px;"></div>
+            </div>
+        </div>
+
+        <div id="priceTotalHeader" class="calcHeader" style="cursor: pointer; font-weight: bold; font-size: 10px; padding: 2px; margin-top: 5px;">
+            ▼ Price Total
+        </div>
+        <div id="priceTotalContent" class="calcContent" style="display: none; padding: 5px;">
+            <div id="priceInputs">
+                <input type="number" class="priceInput" placeholder="Enter price" style="width: 100px; margin: 2px; font-size: 11px;">
+            </div>
+            <button id="addPriceField" style="width: 30px; font-size: 11px; margin: 2px;">+</button>
+            <button id="removePriceField" style="width: 30px; font-size: 11px; margin: 2px;">-</button>
+            <button id="calculateTotal" style="width: 48%; margin-top: 3px; font-size: 11px;">Calculate Total</button>
+            <button id="resetTotal" style="width: 48%; margin-top: 3px; font-size: 11px;">Reset</button>
+            <div style="font-size: 11px; margin-top: 3px;">
+                Items: <span id="itemCount">1</span>
+                Total: $<span id="priceTotal">0.00</span>
+            </div>
+        </div>
+    `;
+
+    // Rest of the code remains the same as in the previous version
+    const div = document.createElement('div');
+    div.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: white;
+        border: 1px solid #ccc;
+        z-index: 10000;
+        width: 160px;
+        font-family: Arial, sans-serif;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    `;
+
+    div.innerHTML = calculatorHTML;
+    document.body.appendChild(div);
+
+    // Drag functionality
+    let isDragging = false;
+    let currentX;
+    let currentY;
+    let initialX;
+    let initialY;
+
+    document.querySelector('.dragHandle').addEventListener('mousedown', startDragging);
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', stopDragging);
+
+    function startDragging(e) {
+        isDragging = true;
+        initialX = e.clientX - div.offsetLeft;
+        initialY = e.clientY - div.offsetTop;
+    }
+
+    function drag(e) {
+        if (isDragging) {
+            e.preventDefault();
+            currentX = e.clientX - initialX;
+            currentY = e.clientY - initialY;
+            currentX = Math.min(Math.max(0, currentX), window.innerWidth - div.offsetWidth);
+            currentY = Math.min(Math.max(0, currentY), window.innerHeight - div.offsetHeight);
+            div.style.left = currentX + 'px';
+            div.style.top = currentY + 'px';
+            div.style.right = 'auto';
+        }
+    }
+
+    function stopDragging() {
+        isDragging = false;
+    }
+
+    function toggleCalculator(header, content) {
+        const isOpen = content.style.display !== 'none';
+        content.style.display = isOpen ? 'none' : 'block';
+        header.textContent = header.textContent.replace(isOpen ? '▲' : '▼', isOpen ? '▼' : '▲');
+    }
+
+    document.getElementById('savingsPercentageHeader').onclick = function() {
+        toggleCalculator(this, document.getElementById('savingsPercentageContent'));
+    };
+
+    document.getElementById('priceTotalHeader').onclick = function() {
+        toggleCalculator(this, document.getElementById('priceTotalContent'));
+    };
+
+    // Add savings row
+    document.getElementById('addSavingsField').onclick = function() {
+        const savingsInputs = document.getElementById('savingsInputs');
+        const rowCount = savingsInputs.children.length + 1;
+        const newRow = document.createElement('div');
+        newRow.className = 'savingsRow';
+        newRow.innerHTML = `
+            <input type="number" class="priceInput" placeholder="Price ${rowCount}" style="width: 70px; margin: 2px; font-size: 11px;">
+            <input type="number" class="saveInput" placeholder="Save ${rowCount}" style="width: 70px; margin: 2px; font-size: 11px;">
+        `;
+        savingsInputs.appendChild(newRow);
+        updateSavingsItemCount();
+    };
+
+    // Remove savings row
+    document.getElementById('removeSavingsField').onclick = function() {
+        const savingsInputs = document.getElementById('savingsInputs');
+        if (savingsInputs.children.length > 2) {  // Changed to 2 to maintain minimum two rows
+            savingsInputs.removeChild(savingsInputs.lastChild);
+            updateSavingsItemCount();
+        }
+    };
+
+    // Calculate percentage
+    document.getElementById('calcBtn').onclick = function() {
+        const rows = document.getElementsByClassName('savingsRow');
+        let totalPrice = 0;
+        let totalSavings = 0;
+
+        for (let row of rows) {
+            const priceInput = row.querySelector('.priceInput');
+            const saveInput = row.querySelector('.saveInput');
+            totalPrice += parseFloat(priceInput.value) || 0;
+            totalSavings += parseFloat(saveInput.value) || 0;
+        }
+
+        if(totalPrice > 0) {
+            const percentage = (totalSavings / totalPrice) * 100;
+            document.getElementById('result').textContent = `Savings: ${percentage.toFixed(2)}%`;
+        }
+    };
+
+    // Reset savings calculator
+    document.getElementById('resetSavings').onclick = function() {
+        const savingsInputs = document.getElementById('savingsInputs');
+        while (savingsInputs.children.length > 2) {  // Keep only first two rows
+            savingsInputs.removeChild(savingsInputs.lastChild);
+        }
+        const inputs = savingsInputs.getElementsByTagName('input');
+        for (let input of inputs) {
+            input.value = '';
+        }
+        document.getElementById('result').textContent = '';
+        updateSavingsItemCount();
+    };
+
+    function updateSavingsItemCount() {
+        const count = document.getElementsByClassName('savingsRow').length;
+        document.getElementById('savingsItemCount').textContent = count;
+    }
+
+    // Price Total Calculator functions
+    document.getElementById('addPriceField').onclick = function() {
+        const priceInputs = document.getElementById('priceInputs');
+        const newInput = document.createElement('input');
+        newInput.type = 'number';
+        newInput.className = 'priceInput';
+        newInput.placeholder = 'Enter price';
+        newInput.style.cssText = 'width: 100px; margin: 2px; font-size: 11px;';
+        priceInputs.appendChild(newInput);
+        updateItemCount();
+    };
+
+    document.getElementById('removePriceField').onclick = function() {
+        const priceInputs = document.getElementById('priceInputs');
+        if (priceInputs.children.length > 1) {
+            priceInputs.removeChild(priceInputs.lastChild);
+            updateItemCount();
+        }
+    };
+
+    document.getElementById('calculateTotal').onclick = function() {
+        const inputs = document.querySelectorAll('#priceInputs .priceInput');
+        let total = 0;
+        for (let input of inputs) {
+            total += parseFloat(input.value) || 0;
+        }
+        document.getElementById('priceTotal').textContent = total.toFixed(2);
+    };
+
+    document.getElementById('resetTotal').onclick = function() {
+        const priceInputs = document.getElementById('priceInputs');
+        while (priceInputs.children.length > 1) {
+            priceInputs.removeChild(priceInputs.lastChild);
+        }
+        priceInputs.children[0].value = '';
+        document.getElementById('priceTotal').textContent = '0.00';
+        updateItemCount();
+    };
+
+    function updateItemCount() {
+        const count = document.querySelectorAll('#priceInputs .priceInput').length;
+        document.getElementById('itemCount').textContent = count;
+    }
+})();
+
